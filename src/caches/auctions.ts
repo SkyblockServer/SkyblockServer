@@ -35,7 +35,7 @@ export async function loadAuctions() {
     const recentlyEnded = await hypixel.fetch('https://api.hypixel.net/skyblock/auctions_ended');
     for (const auction of recentlyEnded.auctions) {
       const index = auctions.findIndex(a => a.id == auction.auction_id);
-      if (index !== -1) auctions.splice(-1, 1);
+      if (index !== -1) auctions.splice(index, 1);
     }
 
     console.log('Auctions Removed', auctions.length);
