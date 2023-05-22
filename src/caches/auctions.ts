@@ -31,14 +31,17 @@ export async function loadAuctions() {
   console.log(`Fetched ${page.totalPages} Pages of Auctions! (${auctions.length} Auctions)`);
 
   setInterval(async () => {
-    console.log('Updating Auctions', auctions.length);
+    let oldAmount = auctions.length;
+    console.log(`Updating Auctions...`);
+
     const recentlyEnded = await hypixel.fetch('https://api.hypixel.net/skyblock/auctions_ended');
     for (const auction of recentlyEnded.auctions) {
       const index = auctions.findIndex(a => a.id == auction.auction_id);
       if (index !== -1) auctions.splice(index, 1);
     }
 
-    console.log('Auctions Removed', auctions.length);
+    console.log(`Removed ${oldAmount - auctions.length} Auctions`);
+    oldAmount = auctions.length;
 
     let next = true;
     let page = 0;
@@ -57,6 +60,7 @@ export async function loadAuctions() {
           }
         });
     }
-    console.log('Updated Auctions', auctions.length);
+
+    console.log(`Added ${auctions.length - oldAmount} Auctions`);
   }, 60_000);
 }
