@@ -88,12 +88,6 @@ export default class HypixelClient {
       priority: true,
     });
   }
-
-  public async fetchAHPage(page = 0) {
-    return await this.fetch(`https://api.hypixel.net/skyblock/auctions?page=${page}`, {
-      ignoreRateLimit: true,
-    });
-  }
 }
 
 interface FetchOptions {

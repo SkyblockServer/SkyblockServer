@@ -35,6 +35,14 @@ export default class Auction {
    * @param data Raw Auction Data
    */
   constructor(data) {
+    this.update(data);
+  }
+
+  /**
+   * Update the Auction Data
+   * @param data The New Data
+   */
+  public update(data) {
     this.rawData = data;
 
     this.id = data.uuid;
