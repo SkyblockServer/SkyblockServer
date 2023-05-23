@@ -1,7 +1,8 @@
 import { hypixel } from '..';
 import Auction from '../classes/Auction';
 
-export const auctions: Auction[] = [];
+export const auctions: Map<string, Auction> = new Map();
+let lastUpdated = 0;
 
 export async function loadAuctions() {
   console.log('Loading Auctions...');
@@ -11,7 +12,9 @@ export async function loadAuctions() {
   });
 
   for (const auction of page.auctions) {
-    auctions.push(new Auction(auction));
+    const auc = new Auction(auction);
+    auctions.set(auc.id, auc);
+    if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
   }
 
   const promises = [];
@@ -22,45 +25,65 @@ export async function loadAuctions() {
         .fetch(`https://api.hypixel.net/skyblock/auctions?page=${i}`, {
           ignoreRateLimit: true,
         })
-        .then(data => auctions.push(...data.auctions.map(auction => new Auction(auction))))
+        .then(data => {
+          for (const auction of data.auctions) {
+            const auc = new Auction(auction);
+            auctions.set(auc.id, auc);
+            if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
+          }
+        })
     );
   }
 
   await Promise.all(promises);
 
-  console.log(`Fetched ${page.totalPages} Pages of Auctions! (${auctions.length} Auctions)`);
+  console.log(`Fetched ${page.totalPages} Pages of Auctions! (${[...auctions.values()].length} Auctions)`);
+}
 
-  setInterval(async () => {
-    let oldAmount = auctions.length;
-    console.log(`Updating Auctions...`);
+export async function updateAuctions() {
+  let page = 0;
+  let next = true;
+  let newLastUpdated = 0;
 
-    const recentlyEnded = await hypixel.fetch('https://api.hypixel.net/skyblock/auctions_ended');
-    for (const auction of recentlyEnded.auctions) {
-      const index = auctions.findIndex(a => a.id == auction.auction_id);
-      if (index !== -1) auctions.splice(index, 1);
-    }
+  while (next) {
+    await hypixel
+      .fetch(`https://api.hypixel.net/skyblock/auctions?page=${page}`, {
+        ignoreRateLimit: true,
+      })
+      .then(data => {
+        // If Final Page
+        if (data.page === data.totalPages - 1) next = false;
 
-    console.log(`Removed ${oldAmount - auctions.length} Auctions`);
-    oldAmount = auctions.length;
+        // Each Auction
+        for (const auction of data.auctions) {
+          // Update cache
+          if (auctions.has(auction.uuid)) auctions.get(auction.uuid).update(auction);
+          else auctions.set(auction.uuid, new Auction(auction));
 
-    let next = true;
-    let page = 0;
+          // Get Auction
+          const auc = auctions.get(auction.uuid);
 
-    while (next) {
-      await hypixel
-        .fetch(`https://api.hypixel.net/skyblock/auctions?page=${page}`, {
-          ignoreRateLimit: true,
-        })
-        .then(data => {
-          for (const auction of data.auctions) {
-            if (auctions.find(a => a.id == auction.uuid)) next = false;
+          // Update "lastUpdated" values
+          if (auc.lastUpdated > newLastUpdated) newLastUpdated = auc.lastUpdated;
+          if (auc.lastUpdated < lastUpdated) next = false;
+        }
 
-            if (next || !auctions.find(a => a.id == auction.uuid)) auctions.push(new Auction(auction));
-            else auctions[auctions.findIndex(a => a.id == auction.uuid)].update(auction);
-          }
-        });
-    }
+        // Increment Page
+        page++;
+      });
+  }
 
-    console.log(`Added ${auctions.length - oldAmount} Auctions`);
-  }, 60_000);
+  lastUpdated = newLastUpdated;
+}
+
+export async function clearEndedAuctions() {
+  const recentlyEnded = await hypixel.fetch('https://api.hypixel.net/skyblock/auctions_ended', {
+    ignoreRateLimit: true,
+  });
+
+  for (const auction of recentlyEnded.auctions) auctions.delete(auction.auction_id);
+
+  // TODO: Decide whether or not to remove expired auctions which haven't been reclaimed by the seller
+  // Decided not to as hypixel api would just re-add them
+  // for (const [_, auction] of auctions) if (auction.ended) auctions.delete(auction.id);
 }
