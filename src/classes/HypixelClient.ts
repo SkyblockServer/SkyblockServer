@@ -1,4 +1,8 @@
 import axios from 'axios';
+import { setAsyncInterval } from '../utils';
+import Logger from './Logger';
+
+const logger = new Logger('Hypixel');
 
 /** A Custom Hypixel Client with Caching and Queueing */
 export default class HypixelClient {
@@ -29,14 +33,12 @@ export default class HypixelClient {
   }
 
   private async setupQueue() {
-    while (true) {
+    setAsyncInterval(async () => {
       if (this.queue.length && this.requestsLeft > 0) {
         await this.queue[0]();
         this.queue.splice(0, 1);
       }
-
-      await new Promise(res => setTimeout(res, 1));
-    }
+    });
   }
 
   public async fetch(url: string, options: FetchOptions = {}): Promise<any> {
@@ -45,7 +47,7 @@ export default class HypixelClient {
     const func = async () => {
       const res = await axios
         .get(url, {
-          headers: this.headers,
+          headers: options.noHeaders ? {} : this.headers,
         })
         .catch(err => err.response);
 
@@ -60,6 +62,7 @@ export default class HypixelClient {
       }
 
       if (res.status === 429) {
+        logger.warn('Ratelimited!');
         this.requestsLeft = 0;
         if (!this.resetTimeout) {
           this.resetTimeout = setTimeout(() => {
@@ -83,9 +86,11 @@ export default class HypixelClient {
     });
   }
 
-  public async fetchKeyInfo() {
-    return await this.fetch(`https://api.hypixel.net/key?key=${this.apiKey}`, {
+  public async fetchKeyInfo(key: string = this.apiKey) {
+    return await this.fetch(`https://api.hypixel.net/key?key=${key}`, {
+      noHeaders: true,
       priority: true,
+      ignoreRateLimit: key !== this.apiKey,
     });
   }
 }
@@ -100,4 +105,7 @@ interface FetchOptions {
    * **WARNING:** DANGEROUS
    */
   ignoreRateLimit?: boolean;
+
+  /** Whether to not put the default headers in */
+  noHeaders?: boolean;
 }

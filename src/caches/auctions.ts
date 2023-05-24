@@ -1,11 +1,14 @@
 import { hypixel } from '..';
 import Auction from '../classes/Auction';
+import Logger from '../classes/Logger';
 
 export const auctions: Map<string, Auction> = new Map();
 let lastUpdated = 0;
 
+const logger = new Logger('Auctions');
+
 export async function loadAuctions() {
-  console.log('Loading Auctions...');
+  logger.debug('Loading Auctions...');
 
   let page = await hypixel.fetch(`https://api.hypixel.net/skyblock/auctions?page=0`, {
     ignoreRateLimit: true,
@@ -37,7 +40,7 @@ export async function loadAuctions() {
 
   await Promise.all(promises);
 
-  console.log(`Fetched ${page.totalPages} Pages of Auctions! (${[...auctions.values()].length} Auctions)`);
+  logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${[...auctions.values()].length} Auctions)`);
 }
 
 export async function updateAuctions() {
