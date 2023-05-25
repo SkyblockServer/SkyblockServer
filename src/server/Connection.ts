@@ -7,10 +7,10 @@ import { WebSocket } from 'ws';
 import { connections } from '.';
 import { hypixel, players } from '..';
 import Logger from '../classes/Logger';
-import { SocketSettings } from '../constants';
+import { ConnectionSettings } from '../constants';
 import { genRandomUUID, wait } from '../utils';
 
-const logger = new Logger('Socket');
+const logger = new Logger('Connection');
 
 /*
 Close Codes:
@@ -21,12 +21,22 @@ Close Codes:
 4003 = Failed to Resume
 
 
-Session gets removed after 30s
+Session gets removed after time set in ConnectionSettings under "session_removal_timeout"
+
+
+Sequence number should increment every time you recieve a message (starting at 1, so the first message gets you to 2), if you recieve a SESSION_CREATE, you set the sequence number to that number, as that number is the sequence number of that SESSION_CREATE message.
+On resume, use the sequence number of the message you last got in the "seq" header and the server will auto-replay the missed events.
 */
 
-export default class Socket {
+export default class Connection {
+  public readonly events: TypedEmitter<ConnectionEvents>;
+
   public socket: WebSocket;
-  public events: TypedEmitter<SocketEvents>;
+
+  public messages: Buffer[] = [];
+  public get seq(): number {
+    return this.messages.length + 1;
+  }
 
   public identity: {
     uuid: string;
@@ -34,27 +44,26 @@ export default class Socket {
     apiKey: string;
   };
 
-  public get connected() {
+  public get connected(): boolean {
     return !!this.socket;
   }
 
   public id: string;
-  public lastSeq: number = 0;
 
   constructor() {
-    this.events = new (EventEmitter as new () => TypedEmitter<SocketEvents>)();
+    this.events = new (EventEmitter as new () => TypedEmitter<ConnectionEvents>)();
   }
 
   public connect(socket: WebSocket, resume: true, lastSeq: number): void;
   public connect(socket: WebSocket, resume: false): void;
   public connect(socket: WebSocket, resume: boolean, lastSeq?: number): void {
-    if (resume && (isNaN(lastSeq) || lastSeq > this.lastSeq)) return socket.close(CloseCodes.RESUME_FAILED, 'Invalid Sequence Number');
+    if (resume && (isNaN(lastSeq) || lastSeq > this.seq)) return socket.close(CloseCodes.RESUME_FAILED, 'Invalid Sequence Number');
 
     this.socket = socket;
 
     this.setupListeners();
 
-    if (resume) this.runResumeProtocol();
+    if (resume) this.runResumeProtocol(lastSeq);
     else this.runInitialProtocol();
 
     this.events.emit('connected');
@@ -65,7 +74,7 @@ export default class Socket {
     this.socket.on('close', async () => {
       this.socket = null;
       if (!this.id) return;
-      const remove = await Promise.race([wait(SocketSettings.session_removal_timeout).then(() => true), once(this.events, 'connected').then(() => false)]);
+      const remove = await Promise.race([wait(ConnectionSettings.session_removal_timeout).then(() => true), once(this.events, 'connected').then(() => false)]);
       if (remove) connections.delete(this.id);
     });
 
@@ -103,9 +112,28 @@ export default class Socket {
     return data;
   }
 
-  public send(packet: Packet): Promise<void> {
+  public send(packet: Packet, reject: boolean = false): Promise<boolean> {
     return new Promise((res, rej) => {
-      if (this.socket.readyState === WebSocket.OPEN) this.socket.send(packet.buf.buffer, err => (err ? rej(err) : res()));
+      if (this.socket.readyState === WebSocket.OPEN)
+        this.socket.send(packet.buf.buffer, err => {
+          this.messages.push(packet.buf.buffer);
+
+          if (err) {
+            if (reject) rej(err);
+            else res(false);
+          } else res(true);
+        });
+    });
+  }
+  public sendRaw(data: Buffer, reject: boolean = false): Promise<boolean> {
+    return new Promise((res, rej) => {
+      if (this.socket.readyState === WebSocket.OPEN)
+        this.socket.send(data, err => {
+          if (err) {
+            if (reject) rej(err);
+            else res(false);
+          } else res(true);
+        });
     });
   }
 
@@ -113,7 +141,7 @@ export default class Socket {
     while (this.connected) {
       const msg = await this.awaitMessage(
         OutgoingPacketIDs.Heartbeat,
-        SocketSettings.heartbeat_interval * 1.5 // 1.5x the heartbeat interval
+        ConnectionSettings.heartbeat_interval * 1.5 // 1.5x the heartbeat interval
       );
 
       if (!msg) return this.socket.close(CloseCodes.HEARTBEAT_FAILED, 'Failed to send a Heartbeat within 1.5x the heartbeat interval');
@@ -121,16 +149,16 @@ export default class Socket {
   }
 
   private async runInitialProtocol() {
-    this.lastSeq = 0;
+    this.messages = [];
 
     await this.send(
       writeIncomingPacket(IncomingPacketIDs.Metadata, {
-        heartbeat_interval: SocketSettings.heartbeat_interval,
+        heartbeat_interval: ConnectionSettings.heartbeat_interval,
       })
     );
     this.setupHeartbeatListener();
 
-    const identity = await this.awaitMessage(OutgoingPacketIDs.Identify, SocketSettings.identify_timeout);
+    const identity = await this.awaitMessage(OutgoingPacketIDs.Identify, ConnectionSettings.identify_timeout);
 
     if (
       !(await players
@@ -163,31 +191,37 @@ export default class Socket {
     await this.send(
       writeIncomingPacket(IncomingPacketIDs.SessionCreate, {
         session_id: this.id,
-        seq: 1,
+        seq: this.seq + 1,
       })
     );
-    this.lastSeq = 1;
   }
 
-  private async runResumeProtocol() {
+  private async runResumeProtocol(lastSeq: number) {
     await this.send(
       writeIncomingPacket(IncomingPacketIDs.Metadata, {
-        heartbeat_interval: SocketSettings.heartbeat_interval,
+        heartbeat_interval: ConnectionSettings.heartbeat_interval,
       })
     );
     this.setupHeartbeatListener();
 
+    for (let i = lastSeq - 1; i < this.messages.length; i++)
+      await this.sendRaw(this.messages[i]).then(success => {
+        if (success) this.messages.splice(i, 1);
+      });
+    if (this.messages.length) return this.socket.close(CloseCodes.RESUME_FAILED, 'Failed to replay all missed packets');
+
+    this.messages = [];
+
     await this.send(
       writeIncomingPacket(IncomingPacketIDs.SessionCreate, {
         session_id: this.id,
-        seq: 1,
+        seq: this.seq + 1,
       })
     );
-    this.lastSeq = 1;
   }
 }
 
-export type SocketEvents = {
+export type ConnectionEvents = {
   connected: () => void;
   message: (data: ReturnType<typeof readOutgoingPacket>) => void;
 };

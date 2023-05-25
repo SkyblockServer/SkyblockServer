@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@minecraft-js/uuid": "^1.0.3",
-    "@skyblock-server/protocol": "../Protocol",
+    "@skyblock-server/protocol": "^1.0.1",
     "axios": "^1.4.0",
     "chalk": "^4.1.2",
     "dotenv": "^16.0.3",
