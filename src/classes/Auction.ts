@@ -1,3 +1,6 @@
+import { AuctionCategory, ItemRarity } from '../Types';
+import { parseNBTData } from '../utils';
+
 /** An Auction */
 export default class Auction {
   public rawData: any;
@@ -10,11 +13,19 @@ export default class Auction {
     start: Date;
     end: Date;
   };
-  public itemBytes: string;
   public claimedBidders: string[];
   public bids: Bid[];
   public bin: boolean;
   public startingBid: number;
+
+  public data: {
+    name: string;
+    lore: string[];
+    category: AuctionCategory;
+    rarity: ItemRarity;
+  };
+  public itemBytes: string;
+  public itemData: any = null;
 
   public get claimed(): boolean {
     if (this.claimedBidders.length) return true;
@@ -64,7 +75,6 @@ export default class Auction {
       start: new Date(data.start),
       end: new Date(data.end),
     };
-    this.itemBytes = typeof data.item_bytes === 'string' ? data.item_bytes : data.item_bytes?.data;
     this.claimedBidders = data.claimed_bidders;
     this.bids = data.bids.map(info => ({
       auction: info.auction_id,
@@ -75,6 +85,32 @@ export default class Auction {
     }));
     this.bin = !!data.bin;
     this.startingBid = data.starting_bid;
+
+    this.data = {
+      name: data.item_name,
+      lore: data.item_lore || [],
+      rarity: data.tier || 'COMMON',
+      category: data.category || 'misc',
+    };
+    this.itemBytes = typeof data.item_bytes === 'string' ? data.item_bytes : data.item_bytes?.data;
+  }
+
+  public async getItemData(refresh = false) {
+    if (!refresh && this.itemData) return this.itemData;
+
+    const nbt = (await parseNBTData(this.itemBytes)).parsed.value.i.value.value[0];
+
+    this.itemData = {
+      blockId: nbt.id.value,
+      itemCount: nbt.Count.value,
+      itemDamage: nbt.Damage.value,
+      nbtData: {
+        name: '',
+        ...nbt.tag,
+      },
+    };
+
+    return this.itemData;
   }
 }
 

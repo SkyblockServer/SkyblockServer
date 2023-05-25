@@ -28,11 +28,12 @@
   },
   "dependencies": {
     "@minecraft-js/uuid": "^1.0.3",
-    "@skyblock-server/protocol": "^1.0.1",
+    "@skyblock-server/protocol": "^1.0.3",
     "axios": "^1.4.0",
     "chalk": "^4.1.2",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "prismarine-nbt": "^2.2.1",
     "ws": "^8.13.0"
   }
 }

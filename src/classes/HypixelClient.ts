@@ -25,6 +25,9 @@ export default class HypixelClient {
     };
   }
 
+  /** Data for the Client */
+  public data: HypixelData = {};
+
   /** A Custom Hypixel Client with Caching */
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -86,6 +89,10 @@ export default class HypixelClient {
     });
   }
 
+  /**
+   * Fetch the Info for an API Key
+   * @param key The API Key (leave empty to use the Client's key)
+   */
   public async fetchKeyInfo(key: string = this.apiKey) {
     return await this.fetch(`https://api.hypixel.net/key?key=${key}`, {
       noHeaders: true,
@@ -109,3 +116,5 @@ interface FetchOptions {
   /** Whether to not put the default headers in */
   noHeaders?: boolean;
 }
+
+interface HypixelData {}

@@ -6,6 +6,7 @@ import TypedEmitter from 'typed-emitter';
 import { WebSocket } from 'ws';
 import { connections } from '.';
 import { hypixel, players } from '..';
+import { auctions } from '../caches/auctions';
 import Logger from '../classes/Logger';
 import { ConnectionSettings } from '../constants';
 import { genRandomUUID, wait } from '../utils';
@@ -80,17 +81,132 @@ export default class Connection {
 
     this.socket.on('ping', () => this.socket.pong());
 
-    this.socket.on('message', raw => {
-      let data: ReturnType<typeof readOutgoingPacket>;
+    this.socket.on('message', async raw => {
+      let msg: ReturnType<typeof readOutgoingPacket>;
       try {
-        data = readOutgoingPacket(raw as Buffer);
+        msg = readOutgoingPacket(raw as Buffer);
       } catch {
         return this.socket.close(CloseCodes.INVALID_MESSAGE, 'Invalid Data');
       }
 
-      this.events.emit('message', data);
+      this.events.emit('message', msg);
 
-      switch (data.id) {
+      switch (msg.id) {
+        case OutgoingPacketIDs.RequestAuctions:
+          let items = [...auctions.values()];
+
+          // @ts-ignore - wtf
+          if (msg.data.query.length) items = items.filter(a => a.data.name.includes(msg.data.query.trim()));
+
+          for (const filter of msg.data.filters) {
+            switch (filter.type) {
+              case 'category':
+                items = items.filter(a => a.data.category === filter.value.toLowerCase().trim());
+                break;
+
+              case 'rarity':
+                items = items.filter(a => a.data.rarity === filter.value.toUpperCase().trim());
+                break;
+
+              case 'type':
+                // No need to do anything for "any" because all items are already included unless changed by another filter
+                if (filter.value === 'any') break;
+                else if (filter.value === 'bin') items = items.filter(a => a.bin);
+                else items = items.filter(a => !a.bin);
+                break;
+
+              default:
+                break;
+            }
+          }
+
+          items = items.sort((a, b) => {
+            // @ts-ignore - wtf
+            switch (msg.data.order.trim()) {
+              case 'high_price':
+                if (!a.highestBid && !b.highestBid) return 0;
+                else if (!a.highestBid && b.highestBid) return 1;
+                else if (a.highestBid && !b.highestBid) return -1;
+
+                if (a.highestBid.amount === b.highestBid.amount) return 0;
+                else if (a.highestBid.amount < b.highestBid.amount) return 1;
+                else if (a.highestBid.amount > b.highestBid.amount) return -1;
+
+                break;
+
+              case 'low_price':
+                if (!a.highestBid && !b.highestBid) return 0;
+                else if (!a.highestBid && b.highestBid) return -1;
+                else if (a.highestBid && !b.highestBid) return 1;
+
+                if (a.highestBid.amount === b.highestBid.amount) return 0;
+                else if (a.highestBid.amount < b.highestBid.amount) return -1;
+                else if (a.highestBid.amount > b.highestBid.amount) return 1;
+
+                break;
+
+              case 'end_near':
+                if (a.timestamps.end > b.timestamps.end) return 1;
+                if (a.timestamps.end < b.timestamps.end) return -1;
+
+                break;
+
+              case 'end_far':
+                if (a.timestamps.end > b.timestamps.end) return -1;
+                if (a.timestamps.end < b.timestamps.end) return 1;
+
+                break;
+
+              case 'random':
+                return Math.floor(Math.random() * 3) - 1;
+
+              default:
+                break;
+            }
+
+            return 0;
+          });
+
+          const finalItems = await Promise.all(
+            items.splice(msg.data.start, msg.data.amount).map(async a => {
+              const itemData = await a.getItemData(true);
+              const highestBid = a.highestBid;
+
+              return {
+                auction_id: a.id,
+                seller: a.seller,
+                seller_profile: a.profileId,
+                itemBytes: a.itemBytes,
+                itemData: JSON.stringify(itemData),
+                timestamps: {
+                  start: a.timestamps.start.getTime(),
+                  end: a.timestamps.end.getTime(),
+                },
+                claimed: a.claimed,
+                ended: a.ended,
+                startingBid: a.startingBid,
+                highestBid: highestBid ? highestBid.amount : 0,
+                lastUpdated: a.lastUpdated,
+                bids: a.bids.map(b => ({
+                  bidder: b.bidder,
+                  bidder_profile: b.profileId,
+                  amount: b.amount,
+                  timestamp: b.timestamp.getTime(),
+                })),
+              };
+            })
+          );
+
+          await this.send(
+            writeIncomingPacket(IncomingPacketIDs.Auctions, {
+              auctions: finalItems,
+            })
+          );
+
+          break;
+
+        default:
+          break;
       }
     });
   }
