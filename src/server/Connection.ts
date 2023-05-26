@@ -329,7 +329,8 @@ export default class Connection {
     this.setupHeartbeatListener();
 
     this.messages.splice(0, lastSeq - 1);
-    for (let i = 0; i < this.messages.length; i++)
+    // "- 1" because of the metadata packet sent right before this
+    for (let i = 0; i < this.messages.length - 1; i++)
       await this.sendRaw(this.messages[i]).then(success => {
         if (success) this.messages.splice(i, 1);
       });
