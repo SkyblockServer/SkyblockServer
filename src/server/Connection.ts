@@ -281,7 +281,7 @@ export default class Connection {
     this.setupHeartbeatListener();
 
     const identity = await this.awaitMessage(OutgoingPacketIDs.Identify, ConnectionSettings.identify_timeout);
-    if (!identity) this.close(CloseCodes.INVALID_IDENTIFY, 'Failed to identify in time');
+    if (!identity) return this.close(CloseCodes.INVALID_IDENTIFY, 'Failed to identify in time');
 
     if (
       !(await players
