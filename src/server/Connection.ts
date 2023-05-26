@@ -54,6 +54,7 @@ export default class Connection {
 
   constructor() {
     this.events = new (EventEmitter as new () => TypedEmitter<ConnectionEvents>)();
+    this.events.setMaxListeners(0);
   }
 
   public connect(socket: WebSocket, resume: true, lastSeq: number): void;
@@ -327,7 +328,8 @@ export default class Connection {
     );
     this.setupHeartbeatListener();
 
-    for (let i = lastSeq - 1; i < this.messages.length; i++)
+    this.messages.splice(0, lastSeq - 1);
+    for (let i = 0; i < this.messages.length; i++)
       await this.sendRaw(this.messages[i]).then(success => {
         if (success) this.messages.splice(i, 1);
       });
