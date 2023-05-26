@@ -87,7 +87,7 @@ export default class Connection {
       try {
         msg = readOutgoingPacket(raw as Buffer);
       } catch {
-        return this.socket.close(CloseCodes.INVALID_MESSAGE, 'Invalid Data');
+        return this.close(CloseCodes.INVALID_MESSAGE, 'Invalid Data');
       }
 
       this.events.emit('message', msg);
@@ -231,7 +231,7 @@ export default class Connection {
 
   public send(packet: Packet, reject: boolean = false): Promise<boolean> {
     return new Promise((res, rej) => {
-      if (this.socket.readyState === WebSocket.OPEN)
+      if (this.socket?.readyState === WebSocket.OPEN)
         this.socket.send(packet.buf.buffer, err => {
           this.messages.push(packet.buf.buffer);
 
@@ -244,7 +244,7 @@ export default class Connection {
   }
   public sendRaw(data: Buffer, reject: boolean = false): Promise<boolean> {
     return new Promise((res, rej) => {
-      if (this.socket.readyState === WebSocket.OPEN)
+      if (this.socket?.readyState === WebSocket.OPEN)
         this.socket.send(data, err => {
           if (err) {
             if (reject) rej(err);
@@ -254,6 +254,11 @@ export default class Connection {
     });
   }
 
+  public close(code: CloseCodes, reason?: string) {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.close(code, reason);
+    this.socket = null;
+  }
+
   private async setupHeartbeatListener() {
     while (this.connected) {
       const msg = await this.awaitMessage(
@@ -261,7 +266,7 @@ export default class Connection {
         ConnectionSettings.heartbeat_interval * 1.5 // 1.5x the heartbeat interval
       );
 
-      if (!msg) return this.socket.close(CloseCodes.HEARTBEAT_FAILED, 'Failed to send a Heartbeat within 1.5x the heartbeat interval');
+      if (!msg) return this.close(CloseCodes.HEARTBEAT_FAILED, 'Failed to send a Heartbeat within 1.5x the heartbeat interval');
     }
   }
 
@@ -276,7 +281,7 @@ export default class Connection {
     this.setupHeartbeatListener();
 
     const identity = await this.awaitMessage(OutgoingPacketIDs.Identify, ConnectionSettings.identify_timeout);
-    if (!identity) this.socket.close(CloseCodes.INVALID_IDENTIFY, 'Failed to identify in time');
+    if (!identity) this.close(CloseCodes.INVALID_IDENTIFY, 'Failed to identify in time');
 
     if (
       !(await players
@@ -284,16 +289,16 @@ export default class Connection {
         .then(() => true)
         .catch(() => false))
     )
-      return this.socket.close(CloseCodes.INVALID_IDENTIFY, 'Invalid UUID');
+      return this.close(CloseCodes.INVALID_IDENTIFY, 'Invalid UUID');
     if (
       !(await players
         .fetchUsername(identity.username, true)
         .then(() => true)
         .catch(() => false))
     )
-      return this.socket.close(CloseCodes.INVALID_IDENTIFY, 'Invalid Username');
-    if ((await players.fetchUUID(identity.uuid)).uuid !== (await players.fetchUsername(identity.username)).uuid) return this.socket.close(CloseCodes.INVALID_IDENTIFY, 'Username and UUID do not match!');
-    if (!(await hypixel.fetchKeyInfo(identity.apiKey)).success) return this.socket.close(CloseCodes.INVALID_IDENTIFY, 'Invalid API Key');
+      return this.close(CloseCodes.INVALID_IDENTIFY, 'Invalid Username');
+    if ((await players.fetchUUID(identity.uuid)).uuid !== (await players.fetchUsername(identity.username)).uuid) return this.close(CloseCodes.INVALID_IDENTIFY, 'Username and UUID do not match!');
+    if (!(await hypixel.fetchKeyInfo(identity.apiKey)).success) return this.close(CloseCodes.INVALID_IDENTIFY, 'Invalid API Key');
 
     const user = await players.fetchUUID(identity.uuid);
     this.identity = {
@@ -326,7 +331,7 @@ export default class Connection {
       await this.sendRaw(this.messages[i]).then(success => {
         if (success) this.messages.splice(i, 1);
       });
-    if (this.messages.length) return this.socket.close(CloseCodes.RESUME_FAILED, 'Failed to replay all missed packets');
+    if (this.messages.length) return this.close(CloseCodes.RESUME_FAILED, 'Failed to replay all missed packets');
 
     this.messages = [];
 
