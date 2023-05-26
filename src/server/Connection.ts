@@ -1,3 +1,4 @@
+import { parseUUID } from '@minecraft-js/uuid';
 import { IncomingPacketIDs, OutgoingPacketIDs, OutgoingPacketTypes, readOutgoingPacket, writeIncomingPacket } from '@skyblock-server/protocol';
 import Packet from '@skyblock-server/protocol/dist/Packet';
 import { once } from 'events';
@@ -275,6 +276,7 @@ export default class Connection {
     this.setupHeartbeatListener();
 
     const identity = await this.awaitMessage(OutgoingPacketIDs.Identify, ConnectionSettings.identify_timeout);
+    if (!identity) this.socket.close(CloseCodes.INVALID_IDENTIFY, 'Failed to identify in time');
 
     if (
       !(await players
@@ -295,7 +297,7 @@ export default class Connection {
 
     const user = await players.fetchUUID(identity.uuid);
     this.identity = {
-      uuid: user.uuid,
+      uuid: parseUUID(user.uuid).toString(true),
       username: user.username,
       apiKey: identity.apiKey,
     };
