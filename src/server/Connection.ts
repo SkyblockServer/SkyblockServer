@@ -328,13 +328,14 @@ export default class Connection {
     );
     this.setupHeartbeatListener();
 
+    // We want to ignore the fact that there is already this packet ^^^^ in the messages cache, so we use " - 1" and " > 1"
+
     this.messages.splice(0, lastSeq - 1);
-    // "- 1" because of the metadata packet sent right before this
     for (let i = 0; i < this.messages.length - 1; i++)
       await this.sendRaw(this.messages[i]).then(success => {
         if (success) this.messages.splice(i, 1);
       });
-    if (this.messages.length) return this.close(CloseCodes.RESUME_FAILED, 'Failed to replay all missed packets');
+    if (this.messages.length > 1) return this.close(CloseCodes.RESUME_FAILED, 'Failed to replay all missed packets');
 
     this.messages = [];
 
