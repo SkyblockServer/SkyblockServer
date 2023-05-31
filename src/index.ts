@@ -5,7 +5,7 @@ import { clearEndedAuctions, loadAuctions, updateAuctions } from './caches/aucti
 import HypixelClient from './classes/HypixelClient';
 import Logger from './classes/Logger';
 import PlayerManager from './classes/PlayerManager';
-import { auctionsUpdateInterval } from './constants';
+import { auctionsReloadInterval, auctionsUpdateInterval } from './constants';
 import { initServer } from './server';
 import { setAsyncInterval } from './utils';
 
@@ -23,11 +23,14 @@ app.get('/', (req, res) => res.sendStatus(200));
 (async () => {
   await hypixel.fetchKeyInfo();
 
-  await loadAuctions();
-  setAsyncInterval(async () => {
+  await loadAuctions(true);
+  setInterval(async () => {
     await clearEndedAuctions();
     await updateAuctions();
   }, auctionsUpdateInterval);
+  setAsyncInterval(async () => {
+    await loadAuctions(false);
+  }, auctionsReloadInterval);
 
   console.log('');
 

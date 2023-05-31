@@ -7,12 +7,14 @@ let lastUpdated = 0;
 
 const logger = new Logger('Auctions');
 
-export async function loadAuctions() {
-  logger.debug('Loading Auctions...');
+export async function loadAuctions(log: boolean) {
+  if (log) logger.debug('Loading Auctions...');
 
   let page = await hypixel.fetch(`https://api.hypixel.net/skyblock/auctions?page=0`, {
     ignoreRateLimit: true,
   });
+
+  auctions.clear();
 
   for (const auction of page.auctions) {
     const auc = new Auction(auction);
@@ -40,7 +42,7 @@ export async function loadAuctions() {
 
   await Promise.all(promises);
 
-  logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${[...auctions.values()].length} Auctions)`);
+  if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${[...auctions.values()].length} Auctions)`);
 }
 
 export async function updateAuctions() {
