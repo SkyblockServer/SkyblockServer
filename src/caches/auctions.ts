@@ -1,28 +1,27 @@
-import { hypixel } from '..';
+import { hypixel, mongo } from '..';
 import Auction from '../classes/Auction';
 import Logger from '../classes/Logger';
 
-export const auctions: Map<string, Auction> = new Map();
 let lastUpdated = 0;
 
 const logger = new Logger('Auctions');
 
 export async function loadAuctions(log: boolean) {
+  const auctions: Auction[] = [];
+
   if (log) logger.debug('Loading Auctions...');
 
   let page = await hypixel.fetch(`https://api.hypixel.net/skyblock/auctions?page=0`, {
     ignoreRateLimit: true,
   });
 
-  auctions.clear();
-
   for (const auction of page.auctions) {
     const auc = new Auction(auction);
-    auctions.set(auc.id, auc);
+    auctions.push(auc);
     if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
   }
 
-  const promises = [];
+  let promises = [];
 
   for (let i = 1; i < page.totalPages; i++) {
     promises.push(
@@ -33,7 +32,7 @@ export async function loadAuctions(log: boolean) {
         .then(data => {
           for (const auction of data.auctions) {
             const auc = new Auction(auction);
-            auctions.set(auc.id, auc);
+            auctions.push(auc);
             if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
           }
         })
@@ -42,7 +41,10 @@ export async function loadAuctions(log: boolean) {
 
   await Promise.all(promises);
 
-  if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${[...auctions.values()].length} Auctions)`);
+  if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${auctions.length} Auctions)`);
+
+  await mongo.resetAuctions();
+  await mongo.addAuctions(auctions.map(i => i.toMongoData()));
 }
 
 export async function updateAuctions() {
@@ -55,18 +57,15 @@ export async function updateAuctions() {
       .fetch(`https://api.hypixel.net/skyblock/auctions?page=${page}`, {
         ignoreRateLimit: true,
       })
-      .then(data => {
+      .then(async data => {
         // If Final Page
         if (data.page === data.totalPages - 1) next = false;
 
         // Each Auction
         for (const auction of data.auctions) {
-          // Update cache
-          if (auctions.has(auction.uuid)) auctions.get(auction.uuid).update(auction);
-          else auctions.set(auction.uuid, new Auction(auction));
+          const auc = new Auction(auction);
 
-          // Get Auction
-          const auc = auctions.get(auction.uuid);
+          await mongo.addAuction(auc.toMongoData());
 
           // Update "lastUpdated" values
           if (auc.lastUpdated > newLastUpdated) newLastUpdated = auc.lastUpdated;
@@ -86,7 +85,7 @@ export async function clearEndedAuctions() {
     ignoreRateLimit: true,
   });
 
-  for (const auction of recentlyEnded.auctions) auctions.delete(auction.auction_id);
+  for (const auction of recentlyEnded.auctions) await mongo.deleteAuction(auction.auction_id);
 
   // TODO: Decide whether or not to remove expired auctions which haven't been reclaimed by the seller
   // Decided not to as hypixel api would just re-add them

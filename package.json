@@ -33,6 +33,7 @@
     "chalk": "^4.1.2",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
+    "mongodb": "^5.5.0",
     "prismarine-nbt": "^2.2.1",
     "ws": "^8.13.0"
   }

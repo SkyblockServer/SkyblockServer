@@ -2,12 +2,13 @@ import { parseUUID } from '@minecraft-js/uuid';
 import { IncomingPacketIDs, OutgoingPacketIDs, OutgoingPacketTypes, readOutgoingPacket, writeIncomingPacket } from '@skyblock-server/protocol';
 import Packet from '@skyblock-server/protocol/dist/Packet';
 import { once } from 'events';
+import { Filter } from 'mongodb';
 import { EventEmitter } from 'stream';
 import TypedEmitter from 'typed-emitter';
 import { WebSocket } from 'ws';
 import { connections } from '.';
-import { hypixel, players } from '..';
-import { auctions } from '../caches/auctions';
+import { hypixel, mongo, players } from '..';
+import { AuctionMongoData } from '../classes/Auction';
 import Logger from '../classes/Logger';
 import { ConnectionSettings } from '../constants';
 import { genRandomUUID, wait } from '../utils';
@@ -95,35 +96,41 @@ export default class Connection {
 
       switch (msg.id) {
         case OutgoingPacketIDs.RequestAuctions:
-          let items = [...auctions.values()];
+          const data = msg.data;
 
-          // @ts-ignore - wtf
-          if (msg.data.query.length) items = items.filter(a => a.data.name.toLowerCase().includes(msg.data.query.trim().toLowerCase()));
+          const filter: Filter<AuctionMongoData> = {
+            $where: function () {
+              const checks = [];
 
-          for (const filter of msg.data.filters) {
-            switch (filter.type) {
-              case 'category':
-                items = items.filter(a => a.data.category === filter.value.toLowerCase().trim());
-                break;
+              if (data.query) checks.push(this.data.name.toLowerCase().includes(data.query.trim().toLowerCase()));
 
-              case 'rarity':
-                items = items.filter(a => a.data.rarity === filter.value.toUpperCase().trim());
-                break;
+              for (const f of data.filters) {
+                switch (f.type) {
+                  case 'category':
+                    checks.push(this.data.category == f.value.toLowerCase().trim());
+                    break;
 
-              case 'type':
-                // No need to do anything for "any" because all items are already included unless changed by another filter
-                if (filter.value.toLowerCase().trim() === 'bin') items = items.filter(a => a.bin);
-                else if (filter.value.toLowerCase().trim() === 'auction') items = items.filter(a => !a.bin);
-                break;
+                  case 'rarity':
+                    checks.push(this.data.rarity == f.value.toUpperCase().trim());
+                    break;
 
-              default:
-                break;
-            }
-          }
+                  case 'type':
+                    // No need to do anything for "any" because all items are already included unless changed by another filter
+                    if (f.value.toLowerCase().trim() === 'bin') checks.push(this.bin == true);
+                    else if (f.value.toLowerCase().trim() === 'auction') checks.push(this.bin == false);
+                    break;
 
-          items = items.sort((a, b) => {
-            // @ts-ignore - wtf
-            switch (msg.data.order.trim()) {
+                  default:
+                    break;
+                }
+              }
+
+              return checks.reduce((a, b) => a && b, true);
+            },
+          };
+
+          const items = (await mongo.findAuctions(filter, true)).sort((a, b) => {
+            switch (data.order.trim()) {
               case 'high_price':
                 if (!a.highestBid && !b.highestBid) return 0;
                 else if (!a.highestBid && b.highestBid) return 1;

@@ -6,6 +6,7 @@ import HypixelClient from './classes/HypixelClient';
 import Logger from './classes/Logger';
 import PlayerManager from './classes/PlayerManager';
 import { auctionsReloadInterval, auctionsUpdateInterval } from './constants';
+import Mongo from './database/Mongo';
 import { initServer } from './server';
 import { setAsyncInterval } from './utils';
 
@@ -14,6 +15,8 @@ export const hypixel = new HypixelClient(process.env.HYPIXEL_API_KEY);
 
 export const app = express();
 export const server = createServer(app);
+export const mongo = new Mongo();
+
 initServer(server);
 
 const logger = new Logger('MAIN');
@@ -21,6 +24,8 @@ const logger = new Logger('MAIN');
 app.get('/', (req, res) => res.sendStatus(200));
 
 (async () => {
+  await mongo.connect();
+
   await hypixel.fetchKeyInfo();
 
   await loadAuctions(true);
