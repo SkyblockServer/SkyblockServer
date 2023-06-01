@@ -1,5 +1,5 @@
 import { hypixel, mongo } from '..';
-import Auction from '../classes/Auction';
+import Auction, { AuctionMongoData } from '../classes/Auction';
 import Logger from '../classes/Logger';
 
 let lastUpdated = 0;
@@ -7,7 +7,7 @@ let lastUpdated = 0;
 const logger = new Logger('Auctions');
 
 export async function loadAuctions(log: boolean) {
-  const auctions: Auction[] = [];
+  const auctions: AuctionMongoData[] = [];
 
   if (log) logger.debug('Loading Auctions...');
 
@@ -17,7 +17,7 @@ export async function loadAuctions(log: boolean) {
 
   for (const auction of page.auctions) {
     const auc = new Auction(auction);
-    auctions.push(auc);
+    auctions.push(auc.toMongoData());
     if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
   }
 
@@ -32,7 +32,7 @@ export async function loadAuctions(log: boolean) {
         .then(data => {
           for (const auction of data.auctions) {
             const auc = new Auction(auction);
-            auctions.push(auc);
+            auctions.push(auc.toMongoData());
             if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
           }
         })
@@ -44,7 +44,7 @@ export async function loadAuctions(log: boolean) {
   if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${auctions.length} Auctions)`);
 
   await mongo.resetAuctions();
-  await mongo.addAuctions(auctions.map(i => i.toMongoData()));
+  await mongo.addAuctions(auctions);
 }
 
 export async function updateAuctions() {
