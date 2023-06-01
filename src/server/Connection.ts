@@ -98,7 +98,7 @@ export default class Connection {
           let items = [...auctions.values()];
 
           // @ts-ignore - wtf
-          if (msg.data.query.length) items = items.filter(a => a.data.name.includes(msg.data.query.trim()));
+          if (msg.data.query.length) items = items.filter(a => a.data.name.toLowerCase().includes(msg.data.query.trim().toLowerCase()));
 
           for (const filter of msg.data.filters) {
             switch (filter.type) {
@@ -112,9 +112,8 @@ export default class Connection {
 
               case 'type':
                 // No need to do anything for "any" because all items are already included unless changed by another filter
-                if (filter.value === 'any') break;
-                else if (filter.value === 'bin') items = items.filter(a => a.bin);
-                else items = items.filter(a => !a.bin);
+                if (filter.value.toLowerCase().trim() === 'bin') items = items.filter(a => a.bin);
+                else if (filter.value.toLowerCase().trim() === 'auction') items = items.filter(a => !a.bin);
                 break;
 
               default:
@@ -169,39 +168,37 @@ export default class Connection {
             return 0;
           });
 
-          const finalItems = await Promise.all(
-            items.splice(msg.data.start, msg.data.amount).map(async a => {
-              const itemData = await a.getItemData(true);
-              const highestBid = a.highestBid;
-
-              return {
-                auction_id: a.id,
-                seller: a.seller,
-                seller_profile: a.profileId,
-                itemBytes: a.itemBytes,
-                itemData: JSON.stringify(itemData),
-                timestamps: {
-                  start: a.timestamps.start.getTime(),
-                  end: a.timestamps.end.getTime(),
-                },
-                claimed: a.claimed,
-                ended: a.ended,
-                startingBid: a.startingBid,
-                highestBid: highestBid ? highestBid.amount : 0,
-                lastUpdated: a.lastUpdated,
-                bids: a.bids.map(b => ({
-                  bidder: b.bidder,
-                  bidder_profile: b.profileId,
-                  amount: b.amount,
-                  timestamp: b.timestamp.getTime(),
-                })),
-              };
-            })
-          );
-
           await this.send(
             writeIncomingPacket(IncomingPacketIDs.Auctions, {
-              auctions: finalItems,
+              auctions: await Promise.all(
+                items.splice(msg.data.start, msg.data.amount).map(async a => {
+                  const itemData = await a.getItemData(true);
+                  const highestBid = a.highestBid;
+
+                  return {
+                    auction_id: a.id,
+                    seller: a.seller,
+                    seller_profile: a.profileId,
+                    itemBytes: a.itemBytes,
+                    itemData: JSON.stringify(itemData),
+                    timestamps: {
+                      start: a.timestamps.start.getTime(),
+                      end: a.timestamps.end.getTime(),
+                    },
+                    claimed: a.claimed,
+                    ended: a.ended,
+                    startingBid: a.startingBid,
+                    highestBid: highestBid ? highestBid.amount : 0,
+                    lastUpdated: a.lastUpdated,
+                    bids: a.bids.map(b => ({
+                      bidder: b.bidder,
+                      bidder_profile: b.profileId,
+                      amount: b.amount,
+                      timestamp: b.timestamp.getTime(),
+                    })),
+                  };
+                })
+              ),
             })
           );
 
