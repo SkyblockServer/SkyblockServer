@@ -89,7 +89,7 @@ export default class Auction {
 
     this.data = {
       name: data.item_name,
-      lore: data.item_lore || [],
+      lore: data.item_lore ? (Array.isArray(data.item_lore) ? data.item_lore : data.item_lore.split('\n')) : [],
       rarity: data.tier || 'COMMON',
       category: data.category || 'misc',
     };
