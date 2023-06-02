@@ -21,7 +21,7 @@ export async function loadAuctions(log: boolean) {
     if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
   }
 
-  let promises = [];
+  const promises = [];
 
   for (let i = 1; i < page.totalPages; i++) {
     promises.push(
@@ -63,16 +63,20 @@ export async function updateAuctions() {
         // If Final Page
         if (data.page === data.totalPages - 1) next = false;
 
+        const promises = [];
+
         // Each Auction
         for (const auction of data.auctions) {
           const auc = new Auction(auction);
 
-          await mongo.addAuction(auc.toMongoData());
+          promises.push(mongo.addAuction(auc.toMongoData()));
 
           // Update "lastUpdated" values
           if (auc.lastUpdated > newLastUpdated) newLastUpdated = auc.lastUpdated;
           if (auc.lastUpdated < lastUpdated) next = false;
         }
+
+        await Promise.all(promises);
 
         // Increment Page
         page++;
@@ -87,7 +91,7 @@ export async function clearEndedAuctions() {
     ignoreRateLimit: true,
   });
 
-  for (const auction of recentlyEnded.auctions) await mongo.deleteAuction(auction.auction_id);
+  await Promise.all(recentlyEnded.auctions.map(auction => mongo.deleteAuction(auction.auction_id)));
 
   // TODO: Decide whether or not to remove expired auctions which haven't been reclaimed by the seller
   // Decided not to as hypixel api would just re-add them
