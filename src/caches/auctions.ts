@@ -45,6 +45,8 @@ export async function loadAuctions(log: boolean) {
 
   await mongo.resetAuctions();
   await mongo.addAuctions(auctions);
+
+  auctions.splice(0, auctions.length);
 }
 
 export async function updateAuctions() {
