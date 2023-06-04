@@ -102,7 +102,7 @@ export default class Connection {
             $where: function () {
               const checks = [];
 
-              if (data.query) checks.push(this.data.name.toLowerCase().includes(data.query.trim().toLowerCase()));
+              if (data.query) checks.push(this.data.name.trim().toLowerCase().includes(data.query.trim().toLowerCase()));
 
               for (const f of data.filters) {
                 switch (f.type) {
@@ -111,7 +111,7 @@ export default class Connection {
                     break;
 
                   case 'rarity':
-                    checks.push(this.data.rarity == f.value.toUpperCase().trim());
+                    checks.push(this.data.rarity == f.value.toUpperCase().trim().replace(/ /g, '_'));
                     break;
 
                   case 'type':
@@ -130,7 +130,7 @@ export default class Connection {
           };
 
           const items = (await mongo.findAuctions(filter, true)).sort((a, b) => {
-            switch (data.order.trim()) {
+            switch (data.order.trim().toLowerCase()) {
               case 'high_price':
                 if (!a.highestBid && !b.highestBid) return 0;
                 else if (!a.highestBid && b.highestBid) return 1;
@@ -177,35 +177,7 @@ export default class Connection {
 
           await this.send(
             writeIncomingPacket(IncomingPacketIDs.Auctions, {
-              auctions: await Promise.all(
-                items.splice(msg.data.start, msg.data.amount).map(async a => {
-                  const itemData = await a.getItemData(true);
-                  const highestBid = a.highestBid;
-
-                  return {
-                    auction_id: a.id,
-                    seller: a.seller,
-                    seller_profile: a.profileId,
-                    itemBytes: a.itemBytes,
-                    itemData: JSON.stringify(itemData),
-                    timestamps: {
-                      start: a.timestamps.start.getTime(),
-                      end: a.timestamps.end.getTime(),
-                    },
-                    claimed: a.claimed,
-                    ended: a.ended,
-                    startingBid: a.startingBid,
-                    highestBid: highestBid ? highestBid.amount : 0,
-                    lastUpdated: a.lastUpdated,
-                    bids: a.bids.map(b => ({
-                      bidder: b.bidder,
-                      bidder_profile: b.profileId,
-                      amount: b.amount,
-                      timestamp: b.timestamp.getTime(),
-                    })),
-                  };
-                })
-              ),
+              auctions: await Promise.all(items.splice(msg.data.start, msg.data.amount).map(a => a.toAPIData())),
             })
           );
 

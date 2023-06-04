@@ -11,8 +11,8 @@ export default class Auction {
   public profileId: string;
   public coopMembers: string[];
   public timestamps: {
-    start: Date;
-    end: Date;
+    start: number;
+    end: number;
   };
   public claimedBidders: string[];
   public bids: Bid[];
@@ -33,7 +33,7 @@ export default class Auction {
     return false;
   }
   public get expired(): boolean {
-    if (Date.now() > this.timestamps.end.getTime()) return true;
+    if (Date.now() > this.timestamps.end) return true;
     return false;
   }
   public get ended(): boolean {
@@ -48,9 +48,9 @@ export default class Auction {
       : null;
   }
   public get lastUpdated(): number {
-    if (this.timestamps.end.getTime() < Date.now()) return this.timestamps.end.getTime();
-    if (this.bids.length) return this.bids.reduce((a, b) => (a.timestamp > b.timestamp ? a : b)).timestamp.getTime();
-    return this.timestamps.start.getTime();
+    if (this.timestamps.end < Date.now()) return this.timestamps.end;
+    if (this.bids.length) return this.bids.reduce((a, b) => (a.timestamp > b.timestamp ? a : b)).timestamp;
+    return this.timestamps.start;
   }
 
   /**
@@ -73,16 +73,16 @@ export default class Auction {
     this.profileId = parseUUID(data.profile_id).toString(false);
     this.coopMembers = data.coop.map(i => parseUUID(i).toString(true));
     this.timestamps = {
-      start: new Date(data.start),
-      end: new Date(data.end),
+      start: data.start,
+      end: data.end,
     };
     this.claimedBidders = data.claimed_bidders.map(i => parseUUID(i).toString(true));
-    this.bids = data.bids.map(info => ({
-      auction: parseUUID(info.auction_id).toString(false),
-      bidder: parseUUID(info.bidder).toString(true),
-      profileId: parseUUID(info.profile_id).toString(false),
-      amount: info.amount,
-      timestamp: new Date(info.timestamp),
+    this.bids = data.bids.map(bid => ({
+      auction: parseUUID(bid.auction_id).toString(false),
+      bidder: parseUUID(bid.bidder).toString(true),
+      profileId: parseUUID(bid.profile_id).toString(false),
+      amount: bid.amount,
+      timestamp: bid.timestamp,
     }));
     this.bin = !!data.bin;
     this.startingBid = data.starting_bid;
@@ -121,13 +121,13 @@ export default class Auction {
       profileId: this.profileId,
       coopMembers: this.coopMembers,
       timestamps: {
-        start: this.timestamps.start.getTime(),
-        end: this.timestamps.end.getTime(),
+        start: this.timestamps.start,
+        end: this.timestamps.end,
       },
       claimedBidders: this.claimedBidders,
       bids: this.bids.map(b => ({
         ...b,
-        timestamp: b.timestamp.getTime(),
+        timestamp: b.timestamp,
       })),
       bin: this.bin,
       startingBid: this.startingBid,
@@ -146,14 +146,11 @@ export default class Auction {
     auc.profileId = data.profileId;
     auc.coopMembers = data.coopMembers;
     auc.timestamps = {
-      start: new Date(data.timestamps.start),
-      end: new Date(data.timestamps.end),
+      start: data.timestamps.start,
+      end: data.timestamps.end,
     };
     auc.claimedBidders = data.claimedBidders;
-    auc.bids = data.bids.map(b => ({
-      ...b,
-      timestamp: new Date(b.timestamp),
-    }));
+    auc.bids = data.bids;
     auc.bin = data.bin;
     auc.startingBid = data.startingBid;
 
@@ -163,6 +160,34 @@ export default class Auction {
 
     return auc;
   }
+
+  public async toAPIData() {
+    const itemData = await this.getItemData(true);
+    const highestBid = this.highestBid;
+
+    return {
+      auction_id: this.id,
+      seller: this.seller,
+      seller_profile: this.profileId,
+      itemBytes: this.itemBytes,
+      itemData: JSON.stringify(itemData),
+      timestamps: {
+        start: this.timestamps.start,
+        end: this.timestamps.end,
+      },
+      claimed: this.claimed,
+      ended: this.ended,
+      startingBid: this.startingBid,
+      highestBid: highestBid ? highestBid.amount : 0,
+      lastUpdated: this.lastUpdated,
+      bids: this.bids.map(b => ({
+        bidder: b.bidder,
+        bidder_profile: b.profileId,
+        amount: b.amount,
+        timestamp: b.timestamp,
+      })),
+    };
+  }
 }
 
 interface Bid {
@@ -170,7 +195,7 @@ interface Bid {
   bidder: string;
   profileId: string;
   amount: number;
-  timestamp: Date;
+  timestamp: number;
 }
 
 export interface AuctionMongoData {
