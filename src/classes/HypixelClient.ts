@@ -8,6 +8,8 @@ const logger = new Logger('Hypixel');
 export default class HypixelClient {
   /** The Hypixel API Key */
   public apiKey: string;
+  /** All Known Valid API Keys */
+  public validKeys: string[];
 
   /** The Request Queue */
   public queue: (() => Promise<void>)[] = [];
@@ -44,7 +46,7 @@ export default class HypixelClient {
     });
   }
 
-  public async fetch(url: string, options: FetchOptions = {}): Promise<any> {
+  public fetch(url: string, options: FetchOptions = {}): Promise<any> {
     let resolve: (data: any) => void;
 
     let attempts = 0;

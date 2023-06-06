@@ -47,3 +47,16 @@ export async function parseNBTData(
   }
   return parseNBT(data, nbtType);
 }
+
+export function t(num: number, type: 'ms' | 's' | 'm' | 'h' | 'd' | 'w'): number {
+  const mappings = {
+    ms: 1,
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+    w: 7 * 24 * 60 * 60 * 1000,
+  };
+
+  return num * mappings[type];
+}

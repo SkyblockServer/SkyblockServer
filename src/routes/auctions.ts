@@ -3,10 +3,11 @@ import { Router } from 'express';
 import { Filter } from 'mongodb';
 import { mongo, players } from '..';
 import Auction, { AuctionMongoData } from '../classes/Auction';
+import ratelimit from '../utils/ratelimit';
 
 const router = Router();
 
-router.get('/get/:id', async (req, res) => {
+router.get('/get/:id', ratelimit(60), async (req, res) => {
   let auction: Auction;
 
   try {
@@ -44,7 +45,7 @@ NOTE: All Optional
 - "start": Numerical 0-Based Index of the First Item to Get - Default 0
 - "amount": Numerical Value of the Amount of Items to Get - Default 100
 */
-router.get('/find', async (req, res) => {
+router.get('/find', ratelimit(30), async (req, res) => {
   const filter: Filter<AuctionMongoData> = {
     $where: function () {
       const checks = [];
@@ -114,7 +115,7 @@ router.get('/find', async (req, res) => {
   res.success(await Promise.all(items.splice(isNaN(req.query.start as any) ? 0 : parseInt(req.query.start as any), isNaN(req.query.amount as any) ? 100 : parseInt(req.query.amount as any)).map(a => a.toAPIData())));
 });
 
-router.get('/amounts', async (req, res) => {
+router.get('/amounts', ratelimit(15), async (req, res) => {
   const auctionCount = await mongo.getAuctionCount({
     bin: false,
   });
@@ -130,7 +131,7 @@ router.get('/amounts', async (req, res) => {
 });
 
 // Identifier can be a Username or a UUID
-router.get('/user/:identifier', async (req, res) => {
+router.get('/user/:identifier', ratelimit(45), async (req, res) => {
   const identifier = req.params.identifier;
 
   let uuid: string = await players.fetchUUID(identifier).then(

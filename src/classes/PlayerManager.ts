@@ -12,11 +12,17 @@ export default class PlayerManager {
   }
 
   /**
-   * Parses and converts a UUID to dashed-format
+   * Parses and converts a UUID to proper format
    * @param uuid The UUID
+   * @param dashes Whether or not to include dashes in the end result, default `true`
+   * @returns The parsed UUID, or `null` if it failed to parse
    */
-  public parseUUID(uuid: string): string {
-    return parseUUID(uuid).toString(true);
+  public parseUUID(uuid: string, dashes: boolean = true): string | null {
+    try {
+      return parseUUID(uuid).toString(dashes);
+    } catch {
+      return null;
+    }
   }
 
   /**
