@@ -39,6 +39,7 @@ export default class Auction {
   public get ended(): boolean {
     return this.expired || this.claimed;
   }
+
   public get highestBid(): Bid | null {
     return this.bids.length
       ? this.bids.reduce((a, b) => {
@@ -47,6 +48,7 @@ export default class Auction {
         })
       : null;
   }
+
   public get lastUpdated(): number {
     if (this.timestamps.end < Date.now()) return this.timestamps.end;
     if (this.bids.length) return this.bids.reduce((a, b) => (a.timestamp > b.timestamp ? a : b)).timestamp;
@@ -174,8 +176,6 @@ export default class Auction {
         start: this.timestamps.start,
         end: this.timestamps.end,
       },
-      claimed: this.claimed,
-      ended: this.ended,
       startingBid: this.startingBid,
       highestBid: highestBid ? highestBid.amount : 0,
       lastUpdated: this.lastUpdated,
@@ -185,6 +185,10 @@ export default class Auction {
         amount: b.amount,
         timestamp: b.timestamp,
       })),
+
+      claimed: this.claimed,
+      expired: this.expired,
+      ended: this.ended,
     };
   }
 }

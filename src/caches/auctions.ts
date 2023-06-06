@@ -44,9 +44,10 @@ export async function loadAuctions(log: boolean) {
       });
 
       thread.on('message', data => {
-        if (typeof data === 'string' && data.startsWith('done')) {
-          thread.terminate();
+        thread.unref();
+        thread.terminate();
 
+        if (typeof data === 'string' && data.startsWith('done')) {
           const newLastUpdated = Number(data.split(':')[1]);
           if (newLastUpdated > lastUpdated) lastUpdated = newLastUpdated;
 
