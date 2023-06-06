@@ -35,4 +35,15 @@ export default class Logger {
   public debug(...args: any[]): void {
     this.logger.debug(chalk.bgGreen.bold.white(' DEBUG '), chalk.bgBlueBright.black(` ${this.identifier} `), ...args);
   }
+
+  /** Throw an Error */
+  public throw(err: string | Error): void {
+    if (err instanceof Error) {
+      this.error(err.message);
+      throw err;
+    } else {
+      this.error(err);
+      throw new Error(err);
+    }
+  }
 }

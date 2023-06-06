@@ -162,7 +162,6 @@ export default class Auction {
   }
 
   public async toAPIData() {
-    const itemData = await this.getItemData(true);
     const highestBid = this.highestBid;
 
     return {
@@ -170,7 +169,7 @@ export default class Auction {
       seller: this.seller,
       seller_profile: this.profileId,
       itemBytes: this.itemBytes,
-      itemData: JSON.stringify(itemData),
+      itemData: await this.getItemData(true),
       timestamps: {
         start: this.timestamps.start,
         end: this.timestamps.end,

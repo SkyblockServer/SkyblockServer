@@ -1,3 +1,5 @@
+import { join } from 'path';
+import { Worker } from 'worker_threads';
 import { hypixel, mongo } from '..';
 import Auction, { AuctionMongoData } from '../classes/Auction';
 import Logger from '../classes/Logger';
@@ -44,9 +46,45 @@ export async function loadAuctions(log: boolean) {
   if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${auctions.length} Auctions)`);
 
   await mongo.resetAuctions();
-  await mongo.addAuctions(auctions);
 
-  auctions.splice(0, auctions.length);
+  let setNum = 0;
+  while (auctions.length) {
+    setNum++;
+
+    const threadCount = 20;
+    const threads = [];
+
+    let i;
+    for (i = 0; i < threadCount; i++) {
+      if (!auctions.length) break;
+
+      let resolve;
+      let reject;
+
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+
+      const thread = new Worker(join(__dirname, '../workers/saveAuctions.js'), {
+        workerData: auctions.splice(0, 999),
+        env: process.env,
+      });
+
+      thread.on('message', data => {
+        if (data === 'done') {
+          thread.terminate();
+          resolve();
+        } else logger.throw(data);
+      });
+
+      threads.push(promise);
+    }
+
+    await Promise.all(threads);
+
+    if (log) logger.debug(`Completed Save Set ${setNum} (${i} Threads)`);
+  }
 }
 
 export async function updateAuctions() {

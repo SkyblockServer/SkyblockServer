@@ -47,12 +47,20 @@ export default class HypixelClient {
   public async fetch(url: string, options: FetchOptions = {}): Promise<any> {
     let resolve: (data: any) => void;
 
+    let attempts = 0;
     const func = async () => {
+      attempts += 1;
+
       const res = await axios
         .get(url, {
           headers: options.noHeaders ? {} : this.headers,
         })
         .catch(err => err.response);
+
+      if (!res) {
+        if (attempts >= 3) return resolve(null);
+        return this.queue.splice(0, 0, func);
+      }
 
       if (res.headers['ratelimit-limit']) {
         if (!this.resetTimeout) {
@@ -73,8 +81,7 @@ export default class HypixelClient {
             this.requestsLeft = 1;
           }, 60_000);
         }
-        this.queue.push(func);
-        return;
+        return this.queue.push(func);
       }
 
       resolve(res.data);
