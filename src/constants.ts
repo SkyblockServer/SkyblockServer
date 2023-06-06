@@ -6,3 +6,5 @@ export const ConnectionSettings = {
   identify_timeout: 10 * 1000, // 10 Seconds
   session_removal_timeout: 30 * 1000, // 30 Seconds
 };
+
+export const auctionsSaveThreadCount = 10;

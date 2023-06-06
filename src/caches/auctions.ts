@@ -3,6 +3,7 @@ import { Worker } from 'worker_threads';
 import { hypixel, mongo } from '..';
 import Auction, { AuctionMongoData } from '../classes/Auction';
 import Logger from '../classes/Logger';
+import { auctionsSaveThreadCount } from '../constants';
 
 let lastUpdated = 0;
 
@@ -11,7 +12,7 @@ const logger = new Logger('Auctions');
 export async function loadAuctions(log: boolean) {
   const auctions: AuctionMongoData[] = [];
 
-  if (log) logger.debug('Loading Auctions...');
+  if (log) logger.debug('Fetching Auctions...');
 
   let page = await hypixel.fetch(`https://api.hypixel.net/skyblock/auctions?page=0`, {
     ignoreRateLimit: true,
@@ -51,11 +52,10 @@ export async function loadAuctions(log: boolean) {
   while (auctions.length) {
     setNum++;
 
-    const threadCount = 20;
     const threads = [];
 
     let i;
-    for (i = 0; i < threadCount; i++) {
+    for (i = 0; i < auctionsSaveThreadCount; i++) {
       if (!auctions.length) break;
 
       let resolve;
