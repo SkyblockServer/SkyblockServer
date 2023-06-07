@@ -3,88 +3,64 @@ import { Worker } from 'worker_threads';
 import { hypixel, mongo } from '..';
 import Auction, { AuctionMongoData } from '../classes/Auction';
 import Logger from '../classes/Logger';
-import { auctionsSaveThreadCount } from '../constants';
+import { auctionsLoadThreadCount } from '../constants';
+import { wait } from '../utils';
 
 let lastUpdated = 0;
 
 const logger = new Logger('Auctions');
 
 export async function loadAuctions(log: boolean) {
-  const auctions: AuctionMongoData[] = [];
-
   if (log) logger.debug('Fetching Auctions...');
 
   let page = await hypixel.fetch(`https://api.hypixel.net/skyblock/auctions?page=0`, {
     ignoreRateLimit: true,
   });
 
+  const auctions: AuctionMongoData[] = [];
   for (const auction of page.auctions) {
     const auc = new Auction(auction);
     auctions.push(auc.toMongoData());
     if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
   }
 
-  const promises = [];
-
-  for (let i = 1; i < page.totalPages; i++) {
-    promises.push(
-      hypixel
-        .fetch(`https://api.hypixel.net/skyblock/auctions?page=${i}`, {
-          ignoreRateLimit: true,
-        })
-        .then(data => {
-          for (const auction of data.auctions) {
-            const auc = new Auction(auction);
-            auctions.push(auc.toMongoData());
-            if (auc.lastUpdated > lastUpdated) lastUpdated = auc.lastUpdated;
-          }
-        })
-    );
-  }
-
-  await Promise.all(promises);
-
-  if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${auctions.length} Auctions)`);
-
   await mongo.resetAuctions();
 
-  let setNum = 0;
-  while (auctions.length) {
-    setNum++;
+  await mongo.addAuctions(auctions);
 
-    const threads = [];
+  let highestPage = 1;
+  let activeThreads = 0;
 
-    let i;
-    for (i = 0; i < auctionsSaveThreadCount; i++) {
-      if (!auctions.length) break;
+  while (highestPage < page.totalPages) {
+    if (activeThreads < auctionsLoadThreadCount) {
+      activeThreads++;
 
-      let resolve;
-      let reject;
-
-      const promise = new Promise((res, rej) => {
-        resolve = res;
-        reject = rej;
-      });
-
-      const thread = new Worker(join(__dirname, '../workers/saveAuctions.js'), {
-        workerData: auctions.splice(0, 999),
+      const thread = new Worker(join(__dirname, '../workers/loadAuctions.js'), {
+        workerData: {
+          page: highestPage,
+          lastUpdated,
+        },
         env: process.env,
       });
 
       thread.on('message', data => {
-        if (data === 'done') {
+        if (typeof data === 'string' && data.startsWith('done')) {
           thread.terminate();
-          resolve();
+
+          const newLastUpdated = Number(data.split(':')[1]);
+          if (newLastUpdated > lastUpdated) lastUpdated = newLastUpdated;
+
+          activeThreads -= 1;
         } else logger.throw(data);
       });
 
-      threads.push(promise);
+      highestPage++;
     }
 
-    await Promise.all(threads);
-
-    if (log) logger.debug(`Completed Save Set ${setNum} (${i} Threads)`);
+    await wait();
   }
+
+  if (log) logger.debug(`Fetched ${page.totalPages} Pages of Auctions! (${page.totalAuctions} Auctions)`);
 }
 
 export async function updateAuctions() {

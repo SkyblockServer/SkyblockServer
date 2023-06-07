@@ -22,7 +22,7 @@ export function clearAsyncInterval(id: string): void {
   delete asyncIntervals[id];
 }
 
-export const wait = (ms: number): Promise<void> => new Promise(res => setTimeout(res, ms));
+export const wait = (ms?: number): Promise<void> => new Promise(res => setTimeout(res, ms));
 
 export async function parseNBTData(
   data: Buffer | string,
