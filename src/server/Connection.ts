@@ -98,36 +98,28 @@ export default class Connection {
         case OutgoingPacketIDs.RequestAuctions:
           const data = msg.data;
 
-          const filter: Filter<AuctionMongoData> = {
-            $where: function () {
-              const checks = [];
+          const filter: Filter<AuctionMongoData> = {};
 
-              if (data.query) checks.push(this.data.name.trim().toLowerCase().includes(data.query.trim().toLowerCase()));
+          if (data.query) filter['data.name'] = new RegExp(`.*${data.query.trim()}.*`, 'i');
 
-              for (const f of data.filters) {
-                switch (f.type) {
-                  case 'category':
-                    checks.push(this.data.category == f.value.toLowerCase().trim());
-                    break;
+          for (const f of data.filters) {
+            switch (f.type) {
+              case 'category':
+                filter['data.category'] = f.value.toLowerCase().trim();
+                break;
 
-                  case 'rarity':
-                    checks.push(this.data.rarity == f.value.toUpperCase().trim().replace(/ /g, '_'));
-                    break;
+              case 'rarity':
+                filter['data.rarity'] = f.value.toUpperCase().trim().replace(/ /g, '_');
+                break;
 
-                  case 'type':
-                    // No need to do anything for "any" because all items are already included unless changed by another filter
-                    if (f.value.toLowerCase().trim() === 'bin') checks.push(this.bin == true);
-                    else if (f.value.toLowerCase().trim() === 'auction') checks.push(this.bin == false);
-                    break;
+              case 'type':
+                const value = f.value.toLowerCase().trim();
 
-                  default:
-                    break;
-                }
-              }
-
-              return checks.reduce((a, b) => a && b, true);
-            },
-          };
+                if (value == 'bin') filter.bin = true;
+                else if (value == 'auction') filter.bin = false;
+                break;
+            }
+          }
 
           const items = (await mongo.findAuctions(filter, true)).sort((a, b) => {
             switch (data.order.trim().toLowerCase()) {
@@ -175,9 +167,10 @@ export default class Connection {
             return 0;
           });
 
+          // TODO: Fix this shit
           await this.send(
             writeIncomingPacket(IncomingPacketIDs.Auctions, {
-              auctions: await Promise.all(items.splice(msg.data.start, msg.data.amount).map(a => a.toAPIData())),
+              auctions: await Promise.all(items.splice(msg.data.start, msg.data.amount).map(a => a.toAPIData(true))),
             })
           );
 

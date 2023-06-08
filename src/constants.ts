@@ -7,4 +7,4 @@ export const ConnectionSettings = {
   session_removal_timeout: 30 * 1000, // 30 Seconds
 };
 
-export const auctionsLoadThreadCount = 10;
+export const auctionsLoadThreadCount = 20;

@@ -1,4 +1,4 @@
-import { Collection, DeleteResult, Filter, InsertManyResult, MongoClient, UpdateResult } from 'mongodb';
+import { Collection, DeleteResult, Filter, FindOptions, InsertManyResult, MongoClient, UpdateResult } from 'mongodb';
 import Auction, { AuctionMongoData } from '../classes/Auction';
 import Logger from '../classes/Logger';
 
@@ -64,10 +64,10 @@ export default class Mongo {
     });
   }
 
-  public async findAuctions(filter: Filter<AuctionMongoData>, asAuctionObjects?: false): Promise<AuctionMongoData[]>;
-  public async findAuctions(filter: Filter<AuctionMongoData>, asAuctionObjects?: true): Promise<Auction[]>;
-  public async findAuctions(filter: Filter<AuctionMongoData>, asAuctionObjects: boolean = false): Promise<AuctionMongoData[] | Auction[]> {
-    const auctions = await this.auctions.find(filter).toArray();
+  public async findAuctions(filter: Filter<AuctionMongoData>, asAuctionObjects?: false, extra?: FindOptions<Document>): Promise<AuctionMongoData[]>;
+  public async findAuctions(filter: Filter<AuctionMongoData>, asAuctionObjects?: true, extra?: FindOptions<Document>): Promise<Auction[]>;
+  public async findAuctions(filter: Filter<AuctionMongoData>, asAuctionObjects: boolean = false, extra: FindOptions<Document> = {}): Promise<AuctionMongoData[] | Auction[]> {
+    const auctions = await this.auctions.find(filter, extra).toArray();
 
     if (asAuctionObjects) return auctions.map(a => Auction.fromMongoData(a));
     return auctions;

@@ -163,7 +163,8 @@ export default class Auction {
     return auc;
   }
 
-  public async toAPIData() {
+  public async toAPIData(stringifiedItemData: boolean = false) {
+    const itemData = await this.getItemData(true);
     const highestBid = this.highestBid;
 
     return {
@@ -171,11 +172,12 @@ export default class Auction {
       seller: this.seller,
       seller_profile: this.profileId,
       itemBytes: this.itemBytes,
-      itemData: await this.getItemData(true),
-      timestamps: {
-        start: this.timestamps.start,
-        end: this.timestamps.end,
-      },
+      itemData: stringifiedItemData ? JSON.stringify(itemData) : itemData,
+      data: this.data,
+      timestamps: this.timestamps,
+      claimed: this.claimed,
+      ended: this.ended,
+      bin: this.bin,
       startingBid: this.startingBid,
       highestBid: highestBid ? highestBid.amount : 0,
       lastUpdated: this.lastUpdated,
@@ -185,10 +187,6 @@ export default class Auction {
         amount: b.amount,
         timestamp: b.timestamp,
       })),
-
-      claimed: this.claimed,
-      expired: this.expired,
-      ended: this.ended,
     };
   }
 }
