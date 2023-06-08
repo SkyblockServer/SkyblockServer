@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { parse as parseNBT } from 'prismarine-nbt';
+import { NBTFormat, parse as parseNBT } from 'prismarine-nbt';
 
 export const genRandomUUID = () => randomUUID();
 
@@ -34,7 +34,7 @@ export async function parseNBTData(
   } & {
     name: string;
   };
-  type: 'big' | 'little' | 'littleVarint';
+  type: NBTFormat;
   metadata: {
     // The decompressed buffer
     buffer: Buffer;
@@ -42,9 +42,8 @@ export async function parseNBTData(
     size: number;
   };
 }> {
-  if (!Buffer.isBuffer(data)) {
-    data = Buffer.from(data, 'base64');
-  }
+  if (!Buffer.isBuffer(data)) data = Buffer.from(data, 'base64');
+
   return parseNBT(data, nbtType);
 }
 
@@ -59,4 +58,16 @@ export function t(num: number, type: 'ms' | 's' | 'm' | 'h' | 'd' | 'w'): number
   };
 
   return num * mappings[type];
+}
+
+export function nextBidPrice(currentPrice: number): number {
+  if (currentPrice < 1) return 2;
+  if (currentPrice >= 1 && currentPrice <= 3) return Math.floor(currentPrice) + 1;
+
+  return Math.round(currentPrice * 1.15);
+}
+export function lastBidPrice(currentPrice: number): number {
+  if (currentPrice < 2) return Math.floor(currentPrice);
+  if (currentPrice >= 2 && currentPrice <= 4) return Math.floor(currentPrice - 1);
+  return currentPrice * (1 / 1.15);
 }

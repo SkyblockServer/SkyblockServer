@@ -2,7 +2,7 @@ import { parseUUID } from '@minecraft-js/uuid';
 import { IncomingPacketIDs, OutgoingPacketIDs, OutgoingPacketTypes, readOutgoingPacket, writeIncomingPacket } from '@skyblock-server/protocol';
 import Packet from '@skyblock-server/protocol/dist/Packet';
 import { once } from 'events';
-import { Filter } from 'mongodb';
+import { Filter, Sort } from 'mongodb';
 import { EventEmitter } from 'stream';
 import TypedEmitter from 'typed-emitter';
 import { WebSocket } from 'ws';
@@ -87,7 +87,7 @@ export default class Connection {
     this.socket.on('message', async raw => {
       let msg: ReturnType<typeof readOutgoingPacket>;
       try {
-        msg = readOutgoingPacket(raw as Buffer);
+        msg = readOutgoingPacket(raw as any);
       } catch {
         return this.close(CloseCodes.INVALID_MESSAGE, 'Invalid Data');
       }
@@ -121,53 +121,38 @@ export default class Connection {
             }
           }
 
-          const items = (await mongo.findAuctions(filter, true)).sort((a, b) => {
-            switch (data.order.trim().toLowerCase()) {
-              case 'high_price':
-                if (!a.highestBid && !b.highestBid) return 0;
-                else if (!a.highestBid && b.highestBid) return 1;
-                else if (a.highestBid && !b.highestBid) return -1;
+          const sort: Sort = {};
 
-                if (a.highestBid.amount === b.highestBid.amount) return 0;
-                else if (a.highestBid.amount < b.highestBid.amount) return 1;
-                else if (a.highestBid.amount > b.highestBid.amount) return -1;
+          switch (data.order.trim().toLowerCase()) {
+            case 'high_price':
+              sort.highestBid = 'descending';
+              break;
 
-                break;
+            case 'low_price':
+              sort.highestBid = 'ascending';
+              break;
 
-              case 'low_price':
-                if (!a.highestBid && !b.highestBid) return 0;
-                else if (!a.highestBid && b.highestBid) return -1;
-                else if (a.highestBid && !b.highestBid) return 1;
+            case 'end_near':
+              sort['timestamps.end'] = 'ascending';
+              break;
 
-                if (a.highestBid.amount === b.highestBid.amount) return 0;
-                else if (a.highestBid.amount < b.highestBid.amount) return -1;
-                else if (a.highestBid.amount > b.highestBid.amount) return 1;
+            case 'end_far':
+              sort['timestamps.end'] = 'descending';
+              break;
 
-                break;
+            case 'random':
+              // Leave as is
+              break;
 
-              case 'end_near':
-                if (a.timestamps.end > b.timestamps.end) return 1;
-                if (a.timestamps.end < b.timestamps.end) return -1;
+            default:
+              break;
+          }
 
-                break;
-
-              case 'end_far':
-                if (a.timestamps.end > b.timestamps.end) return -1;
-                if (a.timestamps.end < b.timestamps.end) return 1;
-
-                break;
-
-              case 'random':
-                return Math.floor(Math.random() * 3) - 1;
-
-              default:
-                break;
-            }
-
-            return 0;
+          const items = await mongo.findAuctions(filter, true, {
+            sort,
+            limit: msg.data.amount + msg.data.start,
           });
 
-          // TODO: Fix this shit
           await this.send(
             writeIncomingPacket(IncomingPacketIDs.Auctions, {
               auctions: await Promise.all(items.splice(msg.data.start, msg.data.amount).map(a => a.toAPIData(true))),
@@ -202,14 +187,22 @@ export default class Connection {
   public send(packet: Packet, reject: boolean = false): Promise<boolean> {
     return new Promise((res, rej) => {
       if (this.socket?.readyState === WebSocket.OPEN)
-        this.socket.send(packet.buf.buffer, err => {
-          this.messages.push(packet.buf.buffer);
+        this.socket.send(
+          packet.buf.buffer,
+          {
+            binary: true,
+            compress: true,
+            fin: true,
+          },
+          err => {
+            this.messages.push(packet.buf.buffer);
 
-          if (err) {
-            if (reject) rej(err);
-            else res(false);
-          } else res(true);
-        });
+            if (err) {
+              if (reject) rej(err);
+              else res(false);
+            } else res(true);
+          }
+        );
     });
   }
   public sendRaw(data: Buffer, reject: boolean = false): Promise<boolean> {

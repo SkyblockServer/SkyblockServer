@@ -1,6 +1,6 @@
 import { parseUUID } from '@minecraft-js/uuid';
 import { AuctionCategory, ItemRarity } from '../Types';
-import { parseNBTData } from '../utils';
+import { lastBidPrice, parseNBTData } from '../utils';
 
 /** An Auction */
 export default class Auction {
@@ -101,12 +101,12 @@ export default class Auction {
   public async getItemData(refresh = false) {
     if (!refresh && this.itemData) return this.itemData;
 
-    const nbt = (await parseNBTData(this.itemBytes)).parsed.value.i.value.value[0];
+    const nbt = (await parseNBTData(this.itemBytes, 'big')).parsed.value.i.value.value[0];
 
     this.itemData = {
       blockId: nbt.id.value,
-      itemCount: nbt.Count.value,
-      itemDamage: nbt.Damage.value,
+      itemCount: nbt.Count?.value || 1,
+      itemDamage: nbt.Damage?.value || 0,
       nbtData: {
         name: '',
         ...nbt.tag,
@@ -133,6 +133,7 @@ export default class Auction {
       })),
       bin: this.bin,
       startingBid: this.startingBid,
+      highestBid: this.highestBid ? this.highestBid.amount : lastBidPrice(this.startingBid),
 
       data: this.data,
       itemBytes: this.itemBytes,
@@ -214,6 +215,7 @@ export interface AuctionMongoData {
   })[];
   bin: boolean;
   startingBid: number;
+  highestBid: number;
 
   data: {
     name: string;
